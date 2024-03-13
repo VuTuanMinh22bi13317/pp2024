@@ -1,5 +1,6 @@
 import math
 import numpy as np
+import curses
 
 class Student:
     def __init__(self, student_id, name, dob):
@@ -7,13 +8,17 @@ class Student:
         self.name = name
         self.dob = dob
         self.marks = {}
-        self.gpa = 0.0
 
     def add_mark(self, course_id, mark):
         self.marks[course_id] = mark
 
     def get_info(self):
-        return f"Student ID: {self.student_id}\nName: {self.name}\nDate of Birth: {self.dob}\n"
+        return f"Student ID: {self.student_id}\nName: {self.name}\nDate of Birth: {self.dob}"
+
+    def calculate_gpa(self, course_credits):
+        total_credits = sum(course_credits)
+        total_weighted_marks = sum(mark * credit for mark, credit in zip(self.marks.values(), course_credits))
+        return math.floor((total_weighted_marks / total_credits) * 10) / 10  # Round down to 1 decimal place
 
 class Course:
     def __init__(self, course_id, name):
@@ -50,8 +55,7 @@ class Classroom:
     def add_mark(self, student_id, course_id, mark):
         for student in self.students:
             if student.student_id == student_id:
-                student.add_mark(course_id, round_down(float(mark)))
-                student.gpa = calculate_gpa(student.marks.values(), student.marks.keys())
+                student.add_mark(course_id, mark)
                 break
         else:
             print(f"No student found with ID {student_id}")
@@ -69,47 +73,60 @@ class Classroom:
         else:
             print(f"No student found with ID {student_id}")
 
-    def average_gpa(self, student_id):
+    def calculate_student_gpas(self, course_credits):
         for student in self.students:
-            if student.student_id == student_id:
-                return student.gpa
-        else:
-            print(f"No student found with ID {student_id}")
+            gpa = student.calculate_gpa(course_credits)
+            setattr(student, 'gpa', gpa)
 
     def sort_students_by_gpa(self):
-        self.students.sort(key=lambda x: x.gpa, reverse=True)
+        self.students.sort(key=lambda student: student.gpa, reverse=True)
 
-def round_down(score):
-    return math.floor(score * 10) / 10
+def main(stdscr):
+    stdscr.clear()
+    curses.curs_set(0)  # Hide cursor
+    stdscr.addstr(0, 0, "Enter the number of students in this class: ")
+    stdscr.refresh()
 
-def calculate_gpa(credits, marks):
-    weighted_sum = np.sum(np.array(credits) * np.array(marks))
-    total_credits = np.sum(np.array(credits))
-    return round_down(weighted_sum / total_credits)
-
-def main():
     classroom = Classroom()
 
-    num_students = int(input("Enter the number of students in this class: "))
+    num_students = int(stdscr.getstr().decode())
     for _ in range(num_students):
-        student_id = input(f"Enter the ID of the student: ")
-        name = input(f"Enter the name of the student: ")
-        dob = input(f"Enter the date of birth of the student (in YYYY-MM-DD format): ")
+        stdscr.addstr(0, 0, "Enter the ID of the student: ")
+        stdscr.refresh()
+        student_id = stdscr.getstr().decode()
+
+        stdscr.addstr(0, 0, "Enter the name of the student: ")
+        stdscr.refresh()
+        name = stdscr.getstr().decode()
+
+        stdscr.addstr(0, 0, "Enter the date of birth of the student (in YYYY-MM-DD format): ")
+        stdscr.refresh()
+        dob = stdscr.getstr().decode()
+
         student = Student(student_id, name, dob)
         classroom.add_student(student)
 
     if not classroom.students:
-        print("There are currently no students.")
+        stdscr.addstr(0, 0, "There is currently no student")
+        stdscr.refresh()
 
-    num_courses = int(input("Enter the number of courses: "))
+    stdscr.addstr(0, 0, "Enter the number of courses: ")
+    stdscr.refresh()
+    num_courses = int(stdscr.getstr().decode())
     for _ in range(num_courses):
-        course_id = input(f"Enter the ID of the course: ")
-        name = input(f"Enter the name of the course: ")
+        stdscr.addstr(0, 0, "Enter the ID of the course: ")
+        stdscr.refresh()
+        course_id = stdscr.getstr().decode()
+
+        stdscr.addstr(0, 0, "Enter the name of the course: ")
+        stdscr.refresh()
+        name = stdscr.getstr().decode()
+
         course = Course(course_id, name)
         classroom.add_course(course)
 
     while True:
-        print("""===============================================
+        stdscr.addstr(0, 0, """===============================================
         0. Exit
         1. Add marks for a student in a course
         2. Add student
@@ -118,35 +135,66 @@ def main():
         5. List courses
         6. Add course
         7. Show marks for a student in a course
-        8. Sort students by GPA
         """)
+        stdscr.refresh()
 
-        option = int(input("Your choice: "))
+        stdscr.addstr(0, 0, "Your choice: ")
+        stdscr.refresh()
+        option = int(stdscr.getstr().decode())
 
         if option == 0:
             break
         elif option == 1:
-            classroom.add_mark(*input("Enter the details (StudentID CourseID Mark): ").split())
+            stdscr.addstr(0, 0, "Enter the details (StudentID CourseID Mark): ")
+            stdscr.refresh()
+            student_id, course_id, mark = stdscr.getstr().decode().split()
+            classroom.add_mark(student_id, course_id, float(mark))
         elif option == 2:
-            classroom.add_student(Student(*input("Enter the details (ID Name DOB): ").split()))
+            stdscr.addstr(0, 0, "Enter the details (ID Name DOB): ")
+            stdscr.refresh()
+            student_id, name, dob = stdscr.getstr().decode().split()
+            student = Student(student_id, name, dob)
+            classroom.add_student(student)
         elif option == 3:
-            classroom.display_student_info(input("ID of the student: "))
+            stdscr.addstr(0, 0, "ID of the student: ")
+            stdscr.refresh()
+            student_id = stdscr.getstr().decode()
+            classroom.display_student_info(student_id)
         elif option == 4:
             classroom.list_students()
         elif option == 5:
             classroom.list_courses()
         elif option == 6:
-            classroom.add_course(Course(*input("Enter the details (ID Name): ").split()))
+            stdscr.addstr(0, 0, "Enter the details (ID Name): ")
+            stdscr.refresh()
+            course_id, name = stdscr.getstr().decode().split()
+            course = Course(course_id, name)
+            classroom.add_course(course)
         elif option == 7:
-            student_id, course_id = input("Enter the details (StudentID CourseID): ").split()
+            stdscr.addstr(0, 0, "Enter the details (StudentID CourseID): ")
+            stdscr.refresh()
+            student_id, course_id = stdscr.getstr().decode().split()
             classroom.show_mark(student_id, course_id)
-            print(f"Average GPA for student {student_id}: {classroom.average_gpa(student_id)}")
-        elif option == 8:
-            classroom.sort_students_by_gpa()
-            print("Students sorted by GPA:")
-            classroom.list_students()
         else:
-            print("Invalid input. Please try again!")
+            stdscr.addstr(0, 0, "Invalid input. Please try again!")
+            stdscr.refresh()
 
-if __name__ == "__main__":
-    main()
+    # Calculate and display student GPAs
+    course_credits = []
+    for _ in range(num_courses):
+        stdscr.addstr(0, 0, f"Enter the credit for course {_ + 1}: ")
+        stdscr.refresh()
+        course_credits.append(float(stdscr.getstr().decode()))
+
+    classroom.calculate_student_gpas(course_credits)
+    classroom.sort_students_by_gpa()
+
+    stdscr.addstr(0, 0, "Students sorted by GPA:")
+    stdscr.refresh()
+    for i, student in enumerate(classroom.students):
+        stdscr.addstr(i + 1, 0, f"{i + 1}. {student.name} - GPA: {student.gpa}")
+        stdscr.refresh()
+
+    stdscr.getch()
+
+curses.wrapper(main)
