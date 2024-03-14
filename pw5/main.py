@@ -2,35 +2,58 @@ import curses
 from domains.student import Student
 from domains.course import Course
 from domains.classroom import Classroom
-from input import get_student_input, get_course_input, get_mark_input
-from output import display_student_info, list_students, list_courses
+from input import get_input
+from output import display_output
 
-def add_credit(classroom):
-    for course in classroom.courses:
-        credits = int(input(f"Enter the number of credits for course {course.course_id}: "))
-        course.credits = credits
+def main(stdscr):
+    stdscr.clear()
+    curses.curs_set(0)  # Hide cursor
+    display_output("Enter the number of students in this class: ")
 
-def main():
     classroom = Classroom()
 
-    num_students = int(input("Enter the number of students in this class: "))
+    num_students = int(get_input())
     for _ in range(num_students):
-        student_id, name, dob = get_student_input()
+        display_output("Enter the ID of the student: ")
+        student_id = get_input()
+
+        display_output("Enter the name of the student: ")
+        name = get_input()
+
+        display_output("Enter the date of birth of the student (in YYYY-MM-DD format): ")
+        dob = get_input()
+
         student = Student(student_id, name, dob)
         classroom.add_student(student)
 
     if not classroom.students:
-        print("There are currently no students.")
+        display_output("There is currently no student")
+    else:
+        with open('students.txt', 'w') as f:
+            for student in classroom.students:
+                f.write(f"{student.student_id},{student.name},{student.dob}\n")
 
-    num_courses = int(input("Enter the number of courses: "))
+    display_output("Enter the number of courses: ")
+    num_courses = int(get_input())
     for _ in range(num_courses):
-        course_id, name = get_course_input()
-        credits = int(input(f"Enter the credit for the course {name}: "))  # Prompt for credits
-        course = Course(course_id, name, credits)
+        display_output("Enter the ID of the course: ")
+        course_id = get_input()
+
+        display_output("Enter the name of the course: ")
+        name = get_input()
+
+        course = Course(course_id, name)
         classroom.add_course(course)
 
+    if not classroom.courses:
+        display_output("There is currently no course")
+    else:
+        with open('courses.txt', 'w') as f:
+            for course in classroom.courses:
+                f.write(f"{course.course_id},{course.name}\n")
+
     while True:
-        print("""===============================================
+        display_output("""===============================================
         0. Exit
         1. Add marks for a student in a course
         2. Add student
@@ -39,40 +62,55 @@ def main():
         5. List courses
         6. Add course
         7. Show marks for a student in a course
-        8. Sort students by GPA
         """)
 
-        option = int(input("Your choice: "))
+        option = int(get_input("Your choice: "))
 
         if option == 0:
             break
         elif option == 1:
-            student_id, course_id, mark = get_mark_input()
-            classroom.add_mark(student_id, course_id, mark)
+            student_id, course_id, mark = get_input("Enter the details (StudentID CourseID Mark): ").split()
+            classroom.add_mark(student_id, course_id, float(mark))
         elif option == 2:
-            student_id, name, dob = get_student_input()
+            student_id, name, dob = get_input("Enter the details (ID Name DOB): ").split()
             student = Student(student_id, name, dob)
             classroom.add_student(student)
         elif option == 3:
-            student_id = input("Enter the ID of the student: ")
-            display_student_info(classroom, student_id)
+            student_id = get_input("ID of the student: ")
+            classroom.display_student_info(student_id)
         elif option == 4:
-            list_students(classroom)
+            classroom.list_students()
         elif option == 5:
-            list_courses(classroom)
+            classroom.list_courses()
         elif option == 6:
-            course_id, name = get_course_input()
-            classroom.add_course(Course(course_id, name))
-            add_credit(classroom)  # After adding a course, add credits
+            course_id, name = get_input("Enter the details (ID Name): ").split()
+            course = Course(course_id, name)
+            classroom.add_course(course)
         elif option == 7:
-            student_id, course_id = input("Enter the details (StudentID CourseID): ").split()
+            student_id, course_id = get_input("Enter the details (StudentID CourseID): ").split()
             classroom.show_mark(student_id, course_id)
-        elif option == 8:
-            classroom.sort_students_by_gpa()
-            print("Students sorted by GPA:")
-            list_students(classroom)
         else:
-            print("Invalid input. Please try again!")
+            display_output("Invalid input. Please try again!")
 
-if __name__ == "__main__":
-    main()
+    # Write marks to marks.txt
+    if classroom.students:
+        with open('marks.txt', 'w') as f:
+            for student in classroom.students:
+                for course_id, mark in student.marks.items():
+                    f.write(f"{student.student_id},{course_id},{mark}\n")
+
+    # Calculate and display student GPAs
+    course_credits = []
+    for _ in range(num_courses):
+        course_credits.append(float(get_input(f"Enter the credit for course {_ + 1}: ")))
+
+    classroom.calculate_student_gpas(course_credits)
+    classroom.sort_students_by_gpa()
+
+    display_output("Students sorted by GPA:")
+    for i, student in enumerate(classroom.students):
+        display_output(f"{i + 1}. {student.name} - GPA: {student.gpa}")
+
+    stdscr.getch()
+
+curses.wrapper(main)
