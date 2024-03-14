@@ -1,68 +1,84 @@
+import curses
+import os
+import gzip
 import pickle
 import threading
-import gzip
 from domains.student import Student
 from domains.course import Course
 from domains.classroom import Classroom
-from input import get_student_input, get_course_input, get_mark_input
-from output import display_student_info, list_students, list_courses
+from input import get_input
+from output import display_output
 
-class PersistenceManager:
-    def __init__(self, filename):
-        self.filename = filename
-        self.classroom = self.load_classroom()
+class PersistenceThread(threading.Thread):
+    def __init__(self, classroom):
+        super().__init__()
+        self.classroom = classroom
 
-    def save_classroom(self):
-        with open(self.filename, 'wb') as file:
-            pickle.dump(self.classroom, file)
+    def run(self):
+        compress_data(self.classroom, 'students.dat')
 
-    def load_classroom(self):
-        try:
-            with open(self.filename, 'rb') as file:
-                return pickle.load(file)
-        except FileNotFoundError:
-            return Classroom()
+def compress_data(data, file_name):
+    with gzip.open(file_name, 'wb') as f:
+        pickle.dump(data, f, protocol=pickle.HIGHEST_PROTOCOL)
 
-    def background_save(self):
-        while True:
-            self.save_classroom()
-            # Adjust the sleep time based on your requirements
-            time.sleep(60)  # Save every 60 seconds
+def decompress_data(file_name):
+    with gzip.open(file_name, 'rb') as f:
+        return pickle.load(f)
 
-def add_credit(classroom):
-    for course in classroom.courses:
-        credits = int(input(f"Enter the number of credits for course {course.course_id}: "))
-        course.credits = credits
+def load_data():
+    if os.path.exists('students.dat'):
+        return decompress_data('students.dat')
+    else:
+        return Classroom()
 
-def main():
-    filename = "classroom.pkl"
-    persistence_manager = PersistenceManager(filename)
-    
-    # Start a background thread for saving data
-    save_thread = threading.Thread(target=persistence_manager.background_save)
-    save_thread.daemon = True
-    save_thread.start()
+def main(stdscr):
+    stdscr.clear()
+    curses.curs_set(0)  # Hide cursor
 
-    classroom = persistence_manager.classroom
+    classroom = load_data()
 
-    num_students = int(input("Enter the number of students in this class: "))
+    display_output("Enter the number of students in this class: ")
+
+    num_students = int(get_input())
     for _ in range(num_students):
-        student_id, name, dob = get_student_input()
+        display_output("Enter the ID of the student: ")
+        student_id = get_input()
+
+        display_output("Enter the name of the student: ")
+        name = get_input()
+
+        display_output("Enter the date of birth of the student (in YYYY-MM-DD format): ")
+        dob = get_input()
+
         student = Student(student_id, name, dob)
         classroom.add_student(student)
 
     if not classroom.students:
-        print("There are currently no students.")
+        display_output("There are currently no students")
+    else:
+        persistence_thread = PersistenceThread(classroom)
+        persistence_thread.start()
 
-    num_courses = int(input("Enter the number of courses: "))
+    display_output("Enter the number of courses: ")
+    num_courses = int(get_input())
     for _ in range(num_courses):
-        course_id, name = get_course_input()
-        credits = int(input(f"Enter the credit for the course {name}: "))  # Prompt for credits
-        course = Course(course_id, name, credits)
+        display_output("Enter the ID of the course: ")
+        course_id = get_input()
+
+        display_output("Enter the name of the course: ")
+        name = get_input()
+
+        course = Course(course_id, name)
         classroom.add_course(course)
 
+    if not classroom.courses:
+        display_output("There are currently no courses")
+    else:
+        persistence_thread = PersistenceThread(classroom)
+        persistence_thread.start()
+
     while True:
-        print("""===============================================
+        display_output("""===============================================
         0. Exit
         1. Add marks for a student in a course
         2. Add student
@@ -71,41 +87,38 @@ def main():
         5. List courses
         6. Add course
         7. Show marks for a student in a course
-        8. Sort students by GPA
         """)
 
-        option = int(input("Your choice: "))
+        option = int(get_input("Your choice: "))
 
         if option == 0:
-            persistence_manager.save_classroom()  # Save classroom before exiting
+            persistence_thread = PersistenceThread(classroom)
+            persistence_thread.start()
             break
         elif option == 1:
-            student_id, course_id, mark = get_mark_input()
-            classroom.add_mark(student_id, course_id, mark)
+            student_id, course_id, mark = get_input("Enter the details (StudentID CourseID Mark): ").split()
+            classroom.add_mark(student_id, course_id, float(mark))
         elif option == 2:
-            student_id, name, dob = get_student_input()
+            student_id, name, dob = get_input("Enter the details (ID Name DOB): ").split()
             student = Student(student_id, name, dob)
             classroom.add_student(student)
         elif option == 3:
-            student_id = input("Enter the ID of the student: ")
-            display_student_info(classroom, student_id)
+            student_id = get_input("ID of the student: ")
+            classroom.display_student_info(student_id)
         elif option == 4:
-            list_students(classroom)
+            classroom.list_students()
         elif option == 5:
-            list_courses(classroom)
+            classroom.list_courses()
         elif option == 6:
-            course_id, name = get_course_input()
-            classroom.add_course(Course(course_id, name))
-            add_credit(classroom)  # After adding a course, add credits
+            course_id, name = get_input("Enter the details (ID Name): ").split()
+            course = Course(course_id, name)
+            classroom.add_course(course)
         elif option == 7:
-            student_id, course_id = input("Enter the details (StudentID CourseID): ").split()
+            student_id, course_id = get_input("Enter the details (StudentID CourseID): ").split()
             classroom.show_mark(student_id, course_id)
-        elif option == 8:
-            classroom.sort_students_by_gpa()
-            print("Students sorted by GPA:")
-            list_students(classroom)
         else:
-            print("Invalid input. Please try again!")
+            display_output("Invalid input. Please try again!")
 
-if __name__ == "__main__":
-    main()
+    stdscr.getch()
+
+curses.wrapper(main)
